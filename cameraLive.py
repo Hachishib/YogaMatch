@@ -3,28 +3,19 @@ import mediapipe as mp
 import numpy as np
 import tensorflow as tf
 
-# ---------------------------
-# Load TFLite model
-# ---------------------------
+
 interpreter = tf.lite.Interpreter(model_path="pose_model.tflite")
 interpreter.allocate_tensors()
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
-# ---------------------------
-# Pose estimation
-# ---------------------------
+
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-# ---------------------------
-# Class labels
-# ---------------------------
+
 class_names = ["Cobra Pose"]
 
-# ---------------------------
-# Landmarks to feature array with strict check
-# ---------------------------
 def landmarks_to_feature_array_strict(landmarks):
     if not landmarks or len(landmarks.landmark) != 33:
         raise ValueError("All 33 landmarks were not detected!")
@@ -33,9 +24,7 @@ def landmarks_to_feature_array_strict(landmarks):
         data.extend([lm.x, lm.y, lm.z])
     return np.array(data, dtype=np.float32).reshape(1, 99)
 
-# ---------------------------
-# Open webcam
-# ---------------------------
+
 cap = cv2.VideoCapture(0)
 
 while True:
@@ -70,3 +59,4 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
+
