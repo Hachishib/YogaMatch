@@ -5,29 +5,19 @@ import time
 import joblib
 
 # === Load your trained model ===
-MODEL_PATH = r"C:\Users\Jevon\Downloads\Codes ni bai\Data Analytics\bound_angle_pose_detector.pkl"
+MODEL_PATH = r"C:\Users\johnp\Downloads\Yoga Pose\YogaMatch\Camel Pose.pkl"
 model = joblib.load(MODEL_PATH)
-
-# === Helper Functions ===
-def calculate_angle(a, b, c):
-    a, b, c = np.array(a), np.array(b), np.array(c)
-    ba = a - b
-    bc = c - b
-    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
-    cosine_angle = np.clip(cosine_angle, -1.0, 1.0)
-    return np.degrees(np.arccos(cosine_angle))
-
-def get_coords(landmark, index):
-    return [landmark[index].x, landmark[index].y]
 
 # === Mediapipe setup ===
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(
+    static_image_mode=False,
+    model_complexity=2,
+    smooth_landmarks=True,
+    enable_segmentation=False,
     min_detection_confidence=0.5,
-    min_tracking_confidence=0.5,
-    enable_segmentation=True,
-    smooth_segmentation=False
+    min_tracking_confidence=0.5
 )
 
 # === Webcam and Timer Setup ===
@@ -50,17 +40,33 @@ while True:
 
     if results.pose_landmarks:
         landmarks = results.pose_landmarks.landmark
-        keypoints = [coord for lm in landmarks for coord in (lm.x, lm.y)]
+
+        # === NEW: Normalization for distance (must match training) ===
+        left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
+        right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
+        ref_x = (left_hip.x + right_hip.x) / 2
+        ref_y = (left_hip.y + right_hip.y) / 2
+
+        left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
+        right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
+        body_scale = np.sqrt((left_shoulder.x - right_shoulder.x) ** 2 +
+                             (left_shoulder.y - right_shoulder.y) ** 2)
+        body_scale = max(body_scale, 1e-6)
+
+        keypoints = []
+        for lm in landmarks:
+            norm_x = (lm.x - ref_x) / body_scale
+            norm_y = (lm.y - ref_y) / body_scale
+            keypoints.extend([norm_x, norm_y])
+        # === END NEW CODE ===
 
         prediction = model.predict([keypoints])[0]
-        confidence = model.predict_proba([keypoints])[0][1] * 100  # Probability for "correct pose"
+        confidence = model.predict_proba([keypoints])[0][1] * 100
 
         # === Pose classification ===
-        if prediction == 1 and confidence >= 90:
+        if prediction == 1 and confidence >= 80:
             feedback = f"Correct Pose ({confidence:.1f}%)"
             color = (0, 255, 0)
-
-            # start or continue timer
             if not is_timing:
                 start_time = time.time()
                 is_timing = True
@@ -70,20 +76,17 @@ while True:
         else:
             feedback = f"Incorrect Pose ({confidence:.1f}%)"
             color = (0, 0, 255)
-
-            # stop timing if pose breaks
             if is_timing:
                 elapsed_time += time.time() - start_time
                 is_timing = False
 
-        # === Draw body landmarks (can be disabled later) ===
-       #mp_drawing.draw_landmarks(
-            #blended_img,
-            #results.pose_landmarks,
-            #mp_pose.POSE_CONNECTIONS,
-            #mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=3),
-            #mp_drawing.DrawingSpec(color=color, thickness=2, circle_radius=2)
-        #)
+        mp_drawing.draw_landmarks(
+            blended_img,
+            results.pose_landmarks,
+            mp_pose.POSE_CONNECTIONS,
+            mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=3),
+            mp_drawing.DrawingSpec(color=color, thickness=2, circle_radius=2)
+        )
 
         # === Display feedback ===
         cv2.putText(blended_img, feedback, (20, 60),
