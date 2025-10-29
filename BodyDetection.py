@@ -41,25 +41,39 @@ while True:
     if results.pose_landmarks:
         landmarks = results.pose_landmarks.landmark
 
-        # === NEW: Normalization for distance (must match training) ===
+
+        avg_z = np.mean([lm.z for lm in landmarks])
+        if avg_z < -0.5:   # adjust this threshold based on your camera
+            feedback = "Move closer"
+            color = (0, 255, 255)
+            # Display feedback and skip pose classification
+            cv2.putText(blended_img, feedback, (20, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+            cv2.imshow("YogaMatch", blended_img)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+            continue
+
+        #    Centers Hip Line 
         left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
         right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
         ref_x = (left_hip.x + right_hip.x) / 2
         ref_y = (left_hip.y + right_hip.y) / 2
 
+       # Sclaes Shoulder  Wides , Solve the layo at lapit By using scales
         left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
         right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
         body_scale = np.sqrt((left_shoulder.x - right_shoulder.x) ** 2 +
                              (left_shoulder.y - right_shoulder.y) ** 2)
         body_scale = max(body_scale, 1e-6)
 
+        #Added Z but can be remove (Para lang pag Malapit yung tao sa Camera or Hindi features)
         keypoints = []
         for lm in landmarks:
-            norm_x = (lm.x - ref_x) / body_scale
-            norm_y = (lm.y - ref_y) / body_scale
-            keypoints.extend([norm_x, norm_y])
-        # === END NEW CODE ===
-
+                norm_x = (lm.x - ref_x) / body_scale
+                norm_y = (lm.y - ref_y) / body_scale
+                norm_z = (lm.z / body_scale) * 0.5
+                keypoints.extend([norm_x, norm_y, norm_z])
         prediction = model.predict([keypoints])[0]
         confidence = model.predict_proba([keypoints])[0][1] * 100
 
