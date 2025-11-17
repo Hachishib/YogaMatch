@@ -1,128 +1,84 @@
-import cv2
 import mediapipe as mp
-import numpy as np
-import time
+import cv2
+import os
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
 import joblib
+import numpy as np  # ✅ Added for math operations
 
-# === Load your trained model ===
-MODEL_PATH = r"C:\Users\johnp\Downloads\Yoga Pose\YogaMatch\Camel Pose.pkl"
-model = joblib.load(MODEL_PATH)
+# --- PATHS ---
+TRAIN_POSITIVE = r"C:\Users\johnp\OneDrive\Desktop\Projects\DA\Test Dataset\Inter\Garland Pose\Train Positive"
+TRAIN_NEGATIVE = r"C:\Users\johnp\OneDrive\Desktop\Projects\DA\Test Dataset\Inter\Garland Pose\Train Negative"
+TEST_POSITIVE  = r"C:\Users\johnp\OneDrive\Desktop\Projects\DA\Test Dataset\Inter\Garland Pose\Test Positive"
+TEST_NEGATIVE  = r"C:\Users\johnp\OneDrive\Desktop\Projects\DA\Test Dataset\Inter\Garland Pose\Test Negative"
 
-# === Mediapipe setup ===
-mp_drawing = mp.solutions.drawing_utils
+MODEL_PATH = "GarlandPose.pkl"
+
+# --- MEDIAPIPE SETUP ---
 mp_pose = mp.solutions.pose
-pose = mp_pose.Pose(
-    static_image_mode=False,
-    model_complexity=2,
-    smooth_landmarks=True,
-    enable_segmentation=False,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5
-)
+pose = mp_pose.Pose(static_image_mode=True)
 
-# === Webcam and Timer Setup ===
-cap = cv2.VideoCapture(0)
-start_time = None
-elapsed_time = 0.0
-is_timing = False
+def extract_keypoints(folder, label):
+    data, labels = [], []
+    for img_file in os.listdir(folder):
+        path = os.path.join(folder, img_file)
+        image = cv2.imread(path)
+        if image is None:
+            continue
+        results = pose.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        if results.pose_landmarks:
+            landmarks = results.pose_landmarks.landmark
 
-# === Main Loop ===
-while True:
-    success, img = cap.read()
-    if not success:
-        print("Failed to read from camera.")
-        break
+            # Center on hips and scale by shoulder distance
+            left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
+            right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
+            ref_x = (left_hip.x + right_hip.x) / 2
+            ref_y = (left_hip.y + right_hip.y) / 2
 
-    img = cv2.flip(img, 1)
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    results = pose.process(img_rgb)
-    blended_img = img.copy()
+            left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
+            right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
+            body_scale = np.sqrt((left_shoulder.x - right_shoulder.x) ** 2 +
+                                 (left_shoulder.y - right_shoulder.y) ** 2)
+            body_scale = max(body_scale, 1e-6)
 
-    if results.pose_landmarks:
-        landmarks = results.pose_landmarks.landmark
+            keypoints = []
+            for lm in landmarks:
+                norm_x = (lm.x - ref_x) / body_scale
+                norm_y = (lm.y - ref_y) / body_scale
+                keypoints.extend([norm_x, norm_y])
+            
 
-        # --- Calculate shoulder distance to estimate distance ---
-        left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
-        right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
+            data.append(keypoints)
+            labels.append(label)
+    return data, labels
 
-        # Normalized distance (0-1)
-        person_width = np.sqrt((left_shoulder.x - right_shoulder.x)**2 + 
-                               (left_shoulder.y - right_shoulder.y)**2)
+print("Loading training data...")
+train_data, train_labels = [], []
+for folder, label in [(TRAIN_POSITIVE, 1), (TRAIN_NEGATIVE, 0)]:
+    d, l = extract_keypoints(folder, label)
+    train_data.extend(d)
+    train_labels.extend(l)
 
-        # --- Dynamic threshold check ---
-        if person_width < 0.06:  # tweak this for your camera/phone
-            feedback = "Move closer"
-            color = (0, 255, 255)
-            cv2.putText(blended_img, feedback, (20, 60),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
-            cv2.imshow("YogaMatch", blended_img)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-            continue  # skip pose classification until person is closer
+print("Loading testing data...")
+test_data, test_labels = [], []
+for folder, label in [(TEST_POSITIVE, 1), (TEST_NEGATIVE, 0)]:
+    d, l = extract_keypoints(folder, label)
+    test_data.extend(d)
+    test_labels.extend(l)
 
-        # --- Center on hips and scale by shoulder distance ---
-        left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
-        right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
-        ref_x = (left_hip.x + right_hip.x) / 2
-        ref_y = (left_hip.y + right_hip.y) / 2
-        body_scale = max(person_width, 1e-6)
+X_train = pd.DataFrame(train_data)
+y_train = pd.Series(train_labels)
+X_test = pd.DataFrame(test_data)
+y_test = pd.Series(test_labels)
 
-        # --- Prepare keypoints for model ---
-        keypoints = []
-        for lm in landmarks:
-            norm_x = (lm.x - ref_x) / body_scale
-            norm_y = (lm.y - ref_y) / body_scale
-            norm_z = lm.z / body_scale  # optional
-            keypoints.extend([norm_x, norm_y, norm_z])
+print("Training model...")
+model = RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42, class_weight='balanced')
+model.fit(X_train, y_train)
 
-        # --- Predict pose ---
-        prediction = model.predict([keypoints])[0]
-        confidence = model.predict_proba([keypoints])[0][1] * 100
+y_pred = model.predict(X_test)
+print(f"\nAccuracy: {accuracy_score(y_test, y_pred)*100:.2f}%")
+print(classification_report(y_test, y_pred))
 
-        # --- Pose feedback ---
-        if prediction == 1 and confidence >= 80:
-            feedback = f"Correct Pose ({confidence:.1f}%)"
-            color = (0, 255, 0)
-            if not is_timing:
-                start_time = time.time()
-                is_timing = True
-            else:
-                elapsed_time += time.time() - start_time
-                start_time = time.time()
-        else:
-            feedback = f"Incorrect Pose ({confidence:.1f}%)"
-            color = (0, 0, 255)
-            if is_timing:
-                elapsed_time += time.time() - start_time
-                is_timing = False
-
-        # --- Draw landmarks ---
-        mp_drawing.draw_landmarks(
-            blended_img,
-            results.pose_landmarks,
-            mp_pose.POSE_CONNECTIONS,
-            mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=3),
-            mp_drawing.DrawingSpec(color=color, thickness=2, circle_radius=2)
-        )
-
-        # --- Display feedback ---
-        cv2.putText(blended_img, feedback, (20, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
-
-        # --- Display timer ---
-        total_time = elapsed_time
-        if is_timing:
-            total_time += time.time() - start_time
-        mins = int(total_time // 60)
-        secs = int(total_time % 60)
-        millis = int((total_time * 1000) % 1000)
-        timer_text = f"Hold Time: {mins:02}:{secs:02}.{millis:03}"
-        cv2.putText(blended_img, timer_text, (20, 110),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
-
-    cv2.imshow("YogaMatch", blended_img)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-cap.release()
-cv2.destroyAllWindows()
+joblib.dump(model, MODEL_PATH)
+print(f"\n✅ Model saved as {MODEL_PATH}")
