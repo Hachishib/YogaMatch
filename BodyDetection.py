@@ -5,7 +5,7 @@ import time
 import joblib
 
 # === Load your trained model ===
-MODEL_PATH = r"C:\Users\johnp\Downloads\Yoga Pose\GarlandPose.pkl"
+MODEL_PATH = r"C:\Users\johnp\Downloads\YogaMatch\GarlandPose.pkl"
 model = joblib.load(MODEL_PATH)
 
 # === Mediapipe setup ===
