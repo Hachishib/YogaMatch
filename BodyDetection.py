@@ -38,6 +38,13 @@ while True:
     results = pose.process(img_rgb)
     blended_img = img.copy()
 
+    if not results.pose_landmarks or len(results.pose_landmarks.landmark) != 33: #add line for missing landmatges , Pag di edi pag sasabi na lumapit 
+        cv2.putText(blended_img, "Move a little closer", (20, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
+        cv2.imshow("YogaMatch", blended_img)
+        cv2.waitKey(1)
+        continue
+
     if results.pose_landmarks:
         landmarks = results.pose_landmarks.landmark
         #    Centers Hip Line 
@@ -51,7 +58,7 @@ while True:
         body_scale = np.sqrt((left_shoulder.x - right_shoulder.x) ** 2 +
                              (left_shoulder.y - right_shoulder.y) ** 2)
         body_scale = max(body_scale, 1e-6)
-        #Added Z but can be remove (Para lang pag Malapit yung tao sa Camera or Hindi features)
+        #Added  but can be remove (Para lang pag Malapit yung tao sa Camera or Hindi features)
         keypoints = []
         for lm in landmarks:
                 norm_x = (lm.x - ref_x) / body_scale
