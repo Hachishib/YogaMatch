@@ -5,7 +5,7 @@ import time
 import joblib
 
 # === Load your trained model ===
-MODEL_PATH = r"C:\Users\johnp\Downloads\YogaMatch\GarlandPose.pkl"
+MODEL_PATH = r"C:\Users\Jevon\Downloads\Codes ni bai\Data Analytics\warrior_ii_pose_detector.pkl"
 model = joblib.load(MODEL_PATH)
 
 # === Mediapipe setup ===
@@ -68,7 +68,7 @@ while True:
         confidence = model.predict_proba([keypoints])[0][1] * 100
 
         # === Pose classification ===
-        if prediction == 1 and confidence >= 80:
+        if prediction == 1 and confidence >= 90:
             feedback = f"Correct Pose ({confidence:.1f}%)"
             color = (0, 255, 0)
             if not is_timing:

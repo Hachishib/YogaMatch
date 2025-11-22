@@ -8,12 +8,12 @@ import joblib
 import numpy as np  # ✅ Added for math operations
 
 # --- PATHS ---
-TRAIN_POSITIVE = r"C:\Users\johnp\OneDrive\Desktop\Projects\DA\Test Dataset\Inter\Garland Pose\Train Positive"
-TRAIN_NEGATIVE = r"C:\Users\johnp\OneDrive\Desktop\Projects\DA\Test Dataset\Inter\Garland Pose\Train Negative"
-TEST_POSITIVE  = r"C:\Users\johnp\OneDrive\Desktop\Projects\DA\Test Dataset\Inter\Garland Pose\Test Positive"
-TEST_NEGATIVE  = r"C:\Users\johnp\OneDrive\Desktop\Projects\DA\Test Dataset\Inter\Garland Pose\Test Negative"
+TRAIN_POSITIVE = r"C:\Users\Jevon\Downloads\Dataset\TRAIN\Warrior II Pose\Positive"
+TRAIN_NEGATIVE = r"C:\Users\Jevon\Downloads\Dataset\TRAIN\Warrior II Pose\Negative"
+TEST_POSITIVE  = r"C:\Users\Jevon\Downloads\Dataset\TEST\Warrior II Pose\Positive"
+TEST_NEGATIVE  = r"C:\Users\Jevon\Downloads\Dataset\TEST\Warrior II Pose\Negative"
 
-MODEL_PATH = "GarlandPose.pkl"
+MODEL_PATH = "warrior_ii_pose_detector.pkl"
 
 # --- MEDIAPIPE SETUP ---
 mp_pose = mp.solutions.pose
@@ -48,7 +48,6 @@ def extract_keypoints(folder, label):
                 norm_y = (lm.y - ref_y) / body_scale
                 keypoints.extend([norm_x, norm_y])
             
-
             data.append(keypoints)
             labels.append(label)
     return data, labels
