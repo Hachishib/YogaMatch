@@ -3,9 +3,11 @@ import cv2
 import os
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import confusion_matrix
 import joblib
-import numpy as np  # ✅ Added for math operations
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # --- PATHS ---
 TRAIN_POSITIVE = r"C:\Users\Jevon\Downloads\Dataset\TRAIN\Warrior II Pose\Positive"
@@ -30,7 +32,7 @@ def extract_keypoints(folder, label):
         if results.pose_landmarks:
             landmarks = results.pose_landmarks.landmark
 
-            # Center on hips and scale by shoulder distance
+            # Center and scale normalization
             left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
             right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
             ref_x = (left_hip.x + right_hip.x) / 2
@@ -52,6 +54,7 @@ def extract_keypoints(folder, label):
             labels.append(label)
     return data, labels
 
+# --- LOAD DATA ---
 print("Loading training data...")
 train_data, train_labels = [], []
 for folder, label in [(TRAIN_POSITIVE, 1), (TRAIN_NEGATIVE, 0)]:
@@ -71,13 +74,43 @@ y_train = pd.Series(train_labels)
 X_test = pd.DataFrame(test_data)
 y_test = pd.Series(test_labels)
 
+# --- TRAIN MODEL ---
 print("Training model...")
-model = RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42, class_weight='balanced')
+model = RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42,class_weight='balanced')
 model.fit(X_train, y_train)
-
 y_pred = model.predict(X_test)
-print(f"\nAccuracy: {accuracy_score(y_test, y_pred)*100:.2f}%")
-print(classification_report(y_test, y_pred))
 
+cm = confusion_matrix(y_test, y_pred)
+TN, FP, FN, TP = cm.ravel()
+
+print("\n📊 CONFUSION MATRIX")
+print(cm)
+
+# Optional: Heatmap visualization
+plt.figure(figsize=(5,4))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",  xticklabels=["Negative", "Positive"], yticklabels=["Negative", "Positive"])
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.title("Confusion Matrix - Warrior II Pose Model")
+plt.show()
+
+# ---- MANUAL METRIC CALCULATIONS ----
+precision = TP / (TP + FP) if (TP + FP) > 0 else 0
+recall = TP / (TP + FN) if (TP + FN) > 0 else 0
+f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+print("\n📈 MANUAL PERFORMANCE METRICS")
+print(f"Precision: {precision:.4f}")
+print(f"Recall:    {recall:.4f}")
+print(f"F1 Score:  {f1:.4f}")
+
+# Extra: Show the reliability indicators
+print("\n🔍 RELIABILITY ANALYSIS")
+print(f"True Positive (TP):   {TP}  → correct poses detected")
+print(f"True Negative (TN):   {TN}  → incorrect poses rejected")
+print(f"False Positive (FP):  {FP}  → dangerous errors (should be LOW)")
+print(f"False Negative (FN):  {FN}  → strictness errors (model says wrong but user is correct)")
+
+# --- SAVE MODEL ---
 joblib.dump(model, MODEL_PATH)
 print(f"\n✅ Model saved as {MODEL_PATH}")
